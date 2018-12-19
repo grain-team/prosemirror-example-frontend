@@ -1,35 +1,93 @@
-import ProseMirrorDocument from 'react-prosemirror-document';
-import React, { Component } from 'react';
+import React  from 'react';
 import './App.css';
 
-const pmDocument = {
-  type: 'doc',
-  content: [{
-    type: 'paragraph',
-    content: [{
-      type: 'text',
-      text: 'Lets add a link to '
-    }, {
-      type: 'text',
-      text: 'my website',
-      marks: [{
-        type: 'link',
-        href: 'https://espen.codes/',
-        title: 'Espen.Codes (personal website)'
-      }]
-    }, {
-      type: 'text',
-      text: ' for fun an profit.'
-    }]
-  }]
-};
+import {Step} from "prosemirror-transform"
+import {schema} from "prosemirror-schema-basic"
+import { EditorState } from 'prosemirror-state'
+import { EditorView } from 'prosemirror-view'
+import {collab, receiveTransaction, sendableSteps, getVersion} from "prosemirror-collab"
+import 'prosemirror-view/style/prosemirror.css'
 
-class App extends Component {
-  render() {
-    return (
-        <ProseMirrorDocument document={pmDocument} />
-    );
-  }
+class App extends React.Component {
+    constructor (props) {
+        super(props);
+        this.editorRef = React.createRef();
+        this.view = null;
+        this.editState = null;
+        this.socket = null;
+        this.dispatch = this.dispatch.bind(this);
+    }
+
+    dispatch(action) {
+        console.log(action);
+        if (action.type === "init") {
+            this.editState = EditorState.create({
+                schema: schema,
+                plugins: [
+                    collab({version: action.version}),
+                ]
+            });
+            let tr = receiveTransaction(this.editState, action.steps, action.clientIDs)
+            this.editState = this.editState.apply(tr);
+            this.view = new EditorView(null, {
+                state: this.editState,
+                dispatchTransaction: transaction => this.dispatch({type: "transaction", transaction})
+            });
+            this.editorRef.current.appendChild(this.view.dom);
+            this.forceUpdate();
+        } else if (action.type === "transaction") {
+            this.editState = this.editState.apply(action.transaction);
+            const sendable = sendableSteps(this.editState);
+            if (sendable) {
+                this.send(sendable);
+            }
+            this.view.updateState(this.editState);
+            this.forceUpdate();
+        }
+    }
+
+    send(steps) {
+        const json = JSON.stringify({
+            version: getVersion(this.editState),
+            steps: steps.steps.map(s => s.toJSON()),
+            clientID: steps.clientID,
+        });
+        this.socket.send(json)
+    }
+
+    componentDidMount() {
+        this.socket = new WebSocket('ws://10.219.71.230:8080');
+        this.socket.addEventListener('message', (event) => {
+            const data = JSON.parse(event.data);
+            console.log(data);
+            switch (data.type) {
+                case "init":
+                    this.dispatch({
+                        type: "init",
+                        steps: data.steps.map(j => Step.fromJSON(schema, j)),
+                        clientIDs: data.clientIDs
+                    })
+                    break;
+                case "steps":
+                    const steps = data.steps.map(j => Step.fromJSON(schema, j));
+                    let tr = receiveTransaction(this.editState, steps, data.clientIDs)
+
+                    this.dispatch({
+                        type: "transaction",
+                        transaction: tr
+                    })
+                    break;
+            }
+        });
+    }
+
+    render () {
+        const editor = <div ref={this.editorRef} />
+        return this.props.render ? this.props.render({
+            editor,
+            view: this.view
+        }) : editor
+    }
 }
 
 export default App;

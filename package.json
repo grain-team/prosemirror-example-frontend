@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "prosemirror-collab": "^1.1.1",
+    "prosemirror-example-setup": "^1.0.1",
+    "prosemirror-schema-basic": "^1.0.0",
     "prosemirror-state": "^1.2.2",
     "react": "^16.6.3",
     "react-dom": "^16.6.3",
-    "react-prosemirror-document": "^4.0.0",
     "react-scripts": "2.1.1"
   },
   "scripts": {
