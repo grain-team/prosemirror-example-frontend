@@ -19,9 +19,9 @@ class App extends React.Component {
     }
 
     dispatch(action) {
-        console.log(action);
         if (action.type === "init") {
             this.editState = EditorState.create({
+                doc: action.doc,
                 schema: schema,
                 plugins: [
                     collab({version: action.version}),
@@ -56,16 +56,18 @@ class App extends React.Component {
     }
 
     componentDidMount() {
-        this.socket = new WebSocket('ws://10.219.71.230:8080');
+        const url ='ws://localhost:8080?hash=' + window.location.hash.substring(1);
+        this.socket = new WebSocket(url);
         this.socket.addEventListener('message', (event) => {
             const data = JSON.parse(event.data);
-            console.log(data);
             switch (data.type) {
                 case "init":
                     this.dispatch({
                         type: "init",
                         steps: data.steps.map(j => Step.fromJSON(schema, j)),
-                        clientIDs: data.clientIDs
+                        clientIDs: data.clientIDs,
+                        doc: schema.nodeFromJSON(data.doc),
+                        version: data.version
                     })
                     break;
                 case "steps":
